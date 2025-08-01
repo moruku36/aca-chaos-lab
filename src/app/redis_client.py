@@ -128,25 +128,44 @@ class RedisClient:
             return False
     
     async def get(self, key: str) -> str | None:
-        """Get value from Redis."""
+        """Get value from Redis with automatic reconnection."""
         if not self.client:
-            raise Exception("Redis client not initialized")
+            await self.connect()
         
-        value = await self.client.get(key)
-        return value if value else None
+        try:
+            value = await self.client.get(key)
+            return value if value else None
+        except (redis.ConnectionError, redis.TimeoutError) as e:
+            logger.warning(f"Redis operation failed, retrying: {e}")
+            await self.connect()  # Reconnect and retry
+            value = await self.client.get(key)
+            return value if value else None
 
     async def set(self, key: str, value: str, ex: int | None = None) -> bool:
-        """Set value in Redis."""
+        """Set value in Redis with automatic reconnection."""
         if not self.client:
-            raise Exception("Redis client not initialized")
+            await self.connect()
         
-        result = await self.client.set(key, value, ex=ex)
-        return bool(result)
+        try:
+            result = await self.client.set(key, value, ex=ex)
+            return bool(result)
+        except (redis.ConnectionError, redis.TimeoutError) as e:
+            logger.warning(f"Redis operation failed, retrying: {e}")
+            await self.connect()  # Reconnect and retry
+            result = await self.client.set(key, value, ex=ex)
+            return bool(result)
 
     async def increment(self, key: str) -> int:
-        """Increment counter in Redis."""
+        """Increment counter in Redis with automatic reconnection."""
         if not self.client:
-            raise Exception("Redis client not initialized")
+            await self.connect()
+        
+        try:
+            return await self.client.incr(key)
+        except (redis.ConnectionError, redis.TimeoutError) as e:
+            logger.warning(f"Redis operation failed, retrying: {e}")
+            await self.connect()  # Reconnect and retry
+            return await self.client.incr(key)
         
         result = await self.client.incr(key)
         return int(result)

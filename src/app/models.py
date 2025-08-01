@@ -1,7 +1,8 @@
 """Pydantic models for API requests and responses."""
 
+from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 
 class HealthResponse(BaseModel):
@@ -23,8 +24,24 @@ class MainResponse(BaseModel):
 class LoadRequest(BaseModel):
     """Load simulation request model."""
 
-    level: str = "low"  # low, medium, high
-    duration_seconds: int = 60
+    level: Literal["low", "medium", "high"] = Field(
+        default="low",
+        description="Load level: low, medium, or high"
+    )
+    duration_seconds: int = Field(
+        default=60,
+        ge=1,
+        le=3600,
+        description="Duration in seconds (1-3600)"
+    )
+
+    @field_validator('level')
+    @classmethod
+    def validate_level(cls, v: str) -> str:
+        """Validate load level."""
+        if v not in ['low', 'medium', 'high']:
+            raise ValueError('Level must be low, medium, or high')
+        return v
 
 
 class LoadResponse(BaseModel):
@@ -38,7 +55,12 @@ class LoadResponse(BaseModel):
 class HangRequest(BaseModel):
     """Hang request model."""
 
-    duration_seconds: int = 0  # 0 means permanent
+    duration_seconds: int = Field(
+        default=0,
+        ge=0,
+        le=3600,
+        description="Hang duration in seconds (0 means permanent, max 3600)"
+    )
 
 
 class RedisResetRequest(BaseModel):

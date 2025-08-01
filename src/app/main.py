@@ -2,11 +2,17 @@
 
 import asyncio
 import logging
+import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 
 from app.chaos import router as chaos_router
 from app.config import Settings
@@ -20,10 +26,24 @@ redis_client: RedisClient | None = None
 tracer = None
 
 # Configure logging
-logging.basicConfig(
-    level=getattr(logging, settings.log_level.upper()),
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+import sys
+import json
+from pythonjsonlogger import jsonlogger
+
+# Setup structured logging
+log_format = jsonlogger.JsonFormatter(
+    "%(asctime)s %(name)s %(levelname)s %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S"
 )
+
+handler = logging.StreamHandler(sys.stdout)
+handler.setFormatter(log_format)
+
+root_logger = logging.getLogger()
+root_logger.handlers.clear()
+root_logger.addHandler(handler)
+root_logger.setLevel(getattr(logging, settings.log_level.upper()))
+
 logger = logging.getLogger(__name__)
 
 
@@ -65,11 +85,72 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Add security middleware
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=["*.azurecontainerapps.io", "localhost", "127.0.0.1"]
+)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
 # Setup telemetry after app creation
 tracer = setup_telemetry(app)
 
 # Include chaos router
 app.include_router(chaos_router)
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """Add security headers to all responses."""
+    response = await call_next(request)
+    
+    # Add security headers
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    
+    # Add request ID if not present
+    if "X-Request-ID" not in request.headers:
+        response.headers["X-Request-ID"] = str(uuid.uuid4())
+    
+    return response
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Handle Pydantic validation errors."""
+    logger.warning(f"Validation error: {exc}")
+    
+    error_response = ErrorResponse(
+        error="Validation Error",
+        detail=f"Invalid request data: {str(exc)}",
+        timestamp=datetime.now(UTC).isoformat(),
+        request_id=request.headers.get("X-Request-ID"),
+    )
+    
+    return JSONResponse(
+        status_code=422,
+        content=error_response.model_dump(exclude_none=True)
+    )
+
+
+@app.exception_handler(ValidationError)
+async def pydantic_validation_exception_handler(request: Request, exc: ValidationError):
+    """Handle Pydantic validation errors."""
+    logger.warning(f"Pydantic validation error: {exc}")
+    
+    error_response = ErrorResponse(
+        error="Validation Error",
+        detail=f"Data validation failed: {str(exc)}",
+        timestamp=datetime.now(UTC).isoformat(),
+        request_id=request.headers.get("X-Request-ID"),
+    )
+    
+    return JSONResponse(
+        status_code=422,
+        content=error_response.model_dump(exclude_none=True)
+    )
 
 
 @app.exception_handler(Exception)

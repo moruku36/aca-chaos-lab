@@ -1,6 +1,7 @@
 """Application configuration."""
 
 import os
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -14,7 +15,7 @@ class Settings(BaseSettings):
 
     # Application settings
     app_port: int = 8000
-    log_level: str = "INFO"
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
 
     # Redis settings
     redis_host: str = get_azd_env_value(

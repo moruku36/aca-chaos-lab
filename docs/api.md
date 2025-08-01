@@ -29,7 +29,7 @@ GET /health
     "connected": true,
     "latency_ms": 5
   },
-  "timestamp": "2024-01-20T10:30:00Z"
+  "timestamp": "2025-08-01T10:30:00Z"
 }
 ```
 
@@ -44,7 +44,7 @@ HTTPステータスコード: 503 Service Unavailable
     "connected": false,
     "latency_ms": 0
   },
-  "timestamp": "2024-01-20T10:30:00Z"
+  "timestamp": "2025-08-01T10:30:00Z"
 }
 ```
 
@@ -70,11 +70,26 @@ GET /
 #### レスポンス（成功時）
 
 ```json
+```json
 {
   "message": "Hello from Container Apps Chaos Lab",
-  "redis_data": "Data created at 2024-01-20T10:30:00Z",
-  "timestamp": "2024-01-20T10:30:00Z"
+  "redis_data": "Data created at 2025-08-01T10:30:00Z",
+  "timestamp": "2025-08-01T10:30:00Z"
 }
+```
+
+#### レスポンス（Redis接続エラー時）
+
+HTTPステータスコード: 503 Service Unavailable
+
+```json
+{
+  "error": "Service Unavailable",
+  "detail": "Redis operation failed: Connection error",
+  "timestamp": "2025-08-01T10:30:00Z",
+  "request_id": "abc123-def456-ghi789"
+}
+```
 ```
 
 | フィールド | 型 | 説明 |

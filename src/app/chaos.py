@@ -141,29 +141,7 @@ async def start_load(request: LoadRequest, req: Request):
             content=error_response.model_dump(exclude_none=True)
         )
 
-    if request.level not in ["low", "medium", "high"]:
-        error_response = ErrorResponse(
-            error="Bad Request",
-            detail="Invalid load level. Must be 'low', 'medium', or 'high'",
-            timestamp=datetime.now(UTC).isoformat(),
-            request_id=req.headers.get("X-Request-ID"),
-        )
-        return JSONResponse(
-            status_code=400,
-            content=error_response.model_dump(exclude_none=True)
-        )
-
-    if request.duration_seconds <= 0 or request.duration_seconds > 3600:
-        error_response = ErrorResponse(
-            error="Bad Request",
-            detail="Duration must be between 1 and 3600 seconds",
-            timestamp=datetime.now(UTC).isoformat(),
-            request_id=req.headers.get("X-Request-ID"),
-        )
-        return JSONResponse(
-            status_code=400,
-            content=error_response.model_dump(exclude_none=True)
-        )
+    # Pydantic已经处理了输入验证，不需要重复检查
 
     # Start load generation in background
     chaos_state._load_task = asyncio.create_task(
@@ -179,6 +157,21 @@ async def start_load(request: LoadRequest, req: Request):
         level=request.level,
         duration_seconds=request.duration_seconds,
     )
+
+
+async def hang_task(duration_seconds: int) -> None:
+    """Background task for handling hang operations."""
+    try:
+        if duration_seconds == 0:
+            # Permanent hang - sleep for a very long time
+            await asyncio.sleep(86400 * 365)  # Sleep for 1 year effectively permanent
+        else:
+            # Timed hang
+            await asyncio.sleep(duration_seconds)
+    finally:
+        chaos_state.hang_active = False
+        chaos_state.hang_end_time = None
+        chaos_state._hang_task = None
 
 
 @router.post("/hang")
@@ -206,11 +199,13 @@ async def hang(request: HangRequest, req: Request) -> JSONResponse:
 
     logger.warning(f"Entering hang state for {request.duration_seconds}s (0=permanent)")
 
-    # This endpoint will not return a response - it hangs
+    # Start hang in background task
+    chaos_state._hang_task = asyncio.create_task(hang_task(request.duration_seconds))
+
+    # This endpoint will hang - it doesn't return a response immediately
     if request.duration_seconds == 0:
-        # Permanent hang
-        while True:  # noqa: ASYNC110
-            await asyncio.sleep(1)
+        # Permanent hang - wait indefinitely
+        await chaos_state._hang_task
     else:
         # Timed hang
         await asyncio.sleep(request.duration_seconds)

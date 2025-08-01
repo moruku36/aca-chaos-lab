@@ -80,8 +80,9 @@ class TestLoadSimulation:
             "duration_seconds": 60
         })
         
-        assert response.status_code == 400
-        assert "Invalid load level" in response.json()["detail"]
+        # Pydantic validation should catch this
+        assert response.status_code == 422
+        assert "validation" in response.json()["error"].lower()
     
     def test_start_load_invalid_duration(self, client):
         """Test load start with invalid duration."""
@@ -90,8 +91,9 @@ class TestLoadSimulation:
             "duration_seconds": 0
         })
         
-        assert response.status_code == 400
-        assert "Duration must be between" in response.json()["detail"]
+        # Pydantic validation should catch this
+        assert response.status_code == 422
+        assert "validation" in response.json()["error"].lower()
         
         # Test too long duration
         response = client.post("/chaos/load", json={
@@ -99,8 +101,9 @@ class TestLoadSimulation:
             "duration_seconds": 3601
         })
         
-        assert response.status_code == 400
-        assert "Duration must be between" in response.json()["detail"]
+        # Pydantic validation should catch this
+        assert response.status_code == 422
+        assert "validation" in response.json()["error"].lower()
     
     def test_start_load_already_active(self, client):
         """Test starting load when already active."""
